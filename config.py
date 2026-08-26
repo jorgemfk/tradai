@@ -7,10 +7,108 @@ import os
 # Universo de activos
 # ---------------------------------------------------------------------------
 TICKERS = {
-    "acciones": ["AAPL", "MSFT", "NVDA", "GOOG", "AMZN", "META", "TSLA",
-                 "AVGO", "JPM", "LLY", "V", "MA", "COST", "NFLX"],
-    "mercado": ["^GSPC", "SPY", "QQQ"],
-    "cripto": ["BTC-USD", "ETH-USD", "SOL-USD"],
+     "acciones": [
+        # Tecnología / IA
+        "AAPL", "MSFT", "NVDA", "GOOG", "GOOGL",
+        "AMZN", "META", "AVGO", "ORCL", "CRM",
+        "AMD", "INTC", "QCOM", "MU", "TSM",
+
+        # Automotriz
+        "TSLA", "F", "GM",
+
+        # Finanzas
+        "JPM", "BAC", "WFC", "GS", "MS",
+        "V", "MA", "AXP", "BRK-B",
+
+        # Salud
+        "LLY", "JNJ", "UNH", "MRK", "ABBV",
+        "PFE", "AMGN",
+
+        # Consumo
+        "COST", "WMT", "HD", "MCD", "NKE",
+        "KO", "PEP",
+
+        # Comunicación
+        "NFLX", "DIS", "CMCSA",
+
+        # Energía
+        "XOM", "CVX", "COP",
+
+        # Industria
+        "CAT", "GE", "HON", "BA",
+
+        # Growth / software
+        "PLTR", "CRWD", "PANW"
+    ],
+
+    "mercado": [
+        "^GSPC",
+        "^DJI",
+        "^IXIC",
+        "^RUT",
+        "^VIX",
+
+        "SPY",
+        "QQQ",
+        "DIA",
+        "IWM",
+
+        "XLK",
+        "XLF",
+        "XLV",
+        "XLE",
+        "XLY",
+        "XLP",
+        "XLI",
+        "XLC",
+        "XLU",
+        "XLRE",
+        "XLB"
+    ],
+
+    "cripto": [
+        "BTC-USD",
+        "ETH-USD",
+        "SOL-USD",
+        "BNB-USD",
+        "XRP-USD",
+        "ADA-USD",
+        "DOGE-USD",
+        "AVAX-USD",
+        "LINK-USD",
+        "DOT-USD",
+        "TRX-USD",
+        "LTC-USD",
+        "BCH-USD",
+        "UNI-USD",
+        "ATOM-USD"
+    ],
+
+    "commodities": [
+        "GC=F",
+        "SI=F",
+        "CL=F",
+        "BZ=F",
+        "NG=F",
+        "HG=F"
+    ],
+
+    "bonos": [
+        "^TNX",
+        "^FVX",
+        "^IRX",
+        "TLT",
+        "IEF",
+        "SHY"
+    ],
+
+    "divisas": [
+        "DX-Y.NYB",
+        "EURUSD=X",
+        "JPY=X",
+        "GBPUSD=X",
+        "MXN=X"
+    ]
 }
 
 ALL_TICKERS = [t for grupo in TICKERS.values() for t in grupo]

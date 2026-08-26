@@ -53,26 +53,43 @@ def load_cached(ticker: str) -> pd.DataFrame:
     return df
 
 
-def refresh_recent(ticker: str, max_age_days: int = 1) -> pd.DataFrame:
-    """Si el cache existe pero está desactualizado, vuelve a descargar todo
-    (yfinance es gratis y esto es lo más simple/robusto para un histórico diario)."""
+def refresh_recent(ticker: str, force: bool = False) -> pd.DataFrame:
+    """Si el cache no tiene el dato de HOY, vuelve a pedirlo al API.
+    (yfinance es gratis y esto es lo más simple/robusto para un histórico diario).
+
+    Si el cache ya tiene la fecha de hoy no vuelve a llamar al API (para no
+    hacer descargas de más si corres el script varias veces el mismo día).
+    Si la descarga falla (sin internet, rate limit, etc.) se conserva el
+    cache existente en vez de romper el pipeline."""
     path = _cache_path(ticker)
     if not os.path.exists(path):
         return update_cache(ticker)
+
     df = pd.read_csv(path, index_col="date", parse_dates=True)
-    last_date = df.index.max()
-    if (pd.Timestamp.now().normalize() - last_date.normalize()).days > max_age_days:
-        return update_cache(ticker)
+    last_date = df.index.max().normalize()
+    today = pd.Timestamp.now().normalize()
+
+    if force or last_date < today:
+        try:
+            return update_cache(ticker)
+        except Exception as e:  # noqa: BLE001
+            print(f"[data_provider] No se pudo refrescar {ticker} "
+                  f"(se sigue usando el cache hasta {last_date.date()}): {e}")
+            return df
     return df
 
 
-def load_all(tickers=None, refresh: bool = False) -> dict:
-    """Devuelve {ticker: DataFrame} para todos los tickers configurados."""
+def load_all(tickers=None, refresh: bool = False, force: bool = False) -> dict:
+    """Devuelve {ticker: DataFrame} para todos los tickers configurados.
+
+    refresh=True  -> pide al API si el cache no tiene el dato de hoy.
+    force=True     -> pide al API sin importar qué fecha tenga el cache.
+    """
     tickers = tickers or config.ALL_TICKERS
     data = {}
     for t in tickers:
         try:
-            df = refresh_recent(t) if refresh else load_cached(t)
+            df = refresh_recent(t, force=force) if (refresh or force) else load_cached(t)
             data[t] = df
             print(f"[data_provider] {t}: {len(df)} filas ({df.index.min().date()} -> {df.index.max().date()})")
         except Exception as e:  # noqa: BLE001
