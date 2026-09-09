@@ -37,7 +37,7 @@ def render_daily_report(result: dict, save: bool = True) -> str:
 
     if oportunidades:
         rows = oportunidades[:18]
-        col_labels = ["Ticker", "Precio", "Caída desde máx.", "Riesgo",
+        col_labels = ["Ticker", "Precio", "Caída desde máx.", "Riesgo", "Martillo",
                       "Agentes que compran", "Confianza"]
         table_data = []
         for o in rows:
@@ -46,6 +46,7 @@ def render_daily_report(result: dict, save: bool = True) -> str:
                 f"${o['precio']:.2f}",
                 f"{o['caida_desde_maximo_pct']:.1f}%",
                 o["riesgo"].upper(),
+                "Sí" if o.get("patron_martillo") else "No",
                 str(o["n_agentes_compran"]),
                 f"{o['confianza_promedio']*100:.0f}%",
             ])
@@ -65,6 +66,8 @@ def render_daily_report(result: dict, save: bool = True) -> str:
                 if c == 3:
                     riesgo = table_data[r - 1][3].lower()
                     cell.set_text_props(color=RISK_COLORS.get(riesgo, "white"), fontweight="bold")
+                if c == 4 and table_data[r - 1][4] == "Sí":
+                    cell.set_text_props(color="#f2b84b", fontweight="bold")
     else:
         ax_table.text(0.02, 0.6, "No se detectaron oportunidades de compra hoy.",
                        color="#aaaaaa", fontsize=12)

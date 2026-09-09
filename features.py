@@ -20,6 +20,48 @@ def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return rsi.fillna(50.0)
 
 
+def detect_bullish_hammer(df: pd.DataFrame, trend_lookback: int = 5) -> pd.Series:
+    """Detecta el patrón de velas 'martillo alcista' (hammer):
+
+      - cuerpo pequeño (apertura/cierre cercanos) ubicado en la parte
+        superior del rango del día
+      - sombra inferior larga (al menos 2x el tamaño del cuerpo) que
+        muestra que el precio fue rechazado tras caer durante la sesión
+      - sombra superior corta o inexistente
+      - aparece después de una caída reciente (si no, no es un patrón de
+        reversión válido, es solo una vela con mecha larga)
+
+    Devuelve una Serie booleana alineada al índice de `df`.
+    """
+    o, h, l, c = df["open"], df["high"], df["low"], df["close"]
+
+    body = (c - o).abs()
+    rng = (h - l)
+    rng_safe = rng.replace(0, np.nan)
+
+    upper_body = pd.concat([o, c], axis=1).max(axis=1)
+    lower_body = pd.concat([o, c], axis=1).min(axis=1)
+    lower_shadow = lower_body - l
+    upper_shadow = h - upper_body
+
+    # umbral mínimo de "cuerpo" para evitar división por cero en velas doji
+    body_floor = (rng_safe * 0.02).fillna(0)
+    body_eff = body.where(body > body_floor, body_floor)
+
+    body_pequeno = (body / rng_safe) <= 0.35
+    sombra_inferior_larga = lower_shadow >= (2.0 * body_eff)
+    # la sombra superior debe ser corta, tolerando un poco más cuando el
+    # cuerpo es muy pequeño (para no descartar martillos "perfectos")
+    sombra_superior_corta = upper_shadow <= np.maximum(0.5 * body_eff, 0.12 * rng_safe)
+
+    # contexto de caída previa: el cierre de ayer está por debajo del cierre
+    # de hace `trend_lookback` días -> veníamos de una tendencia bajista
+    caida_previa = c.shift(1) < c.shift(trend_lookback + 1)
+
+    hammer = body_pequeno & sombra_inferior_larga & sombra_superior_corta & caida_previa
+    return hammer.fillna(False)
+
+
 def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
     """A partir del OHLCV diario, arma una tabla de features por día.
 
@@ -31,6 +73,7 @@ def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
       4 volatility          : volatilidad (std retornos 20d)
       5 momentum_10d        : retorno acumulado de los últimos 10 días
       6 volume_zscore       : z-score del volumen respecto a su media 20d
+      7 hammer_signal       : 1.0 si hoy se formó un martillo alcista, si no 0.0
     """
     out = pd.DataFrame(index=df.index)
     close = df["close"]
@@ -60,6 +103,11 @@ def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
     else:
         out["volume_zscore"] = 0.0
 
+    if {"open", "high", "low"}.issubset(df.columns):
+        out["hammer_signal"] = detect_bullish_hammer(df).astype(float)
+    else:
+        out["hammer_signal"] = 0.0
+
     out["close"] = close
     out["rolling_high"] = rolling_high
     out["sma50"] = sma50
@@ -69,8 +117,8 @@ def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-FEATURE_COLUMNS = ["drop_from_high", "sma20_dist", "sma50_slope",
-                    "rsi_norm", "volatility", "momentum_10d", "volume_zscore"]
+FEATURE_COLUMNS = ["drop_from_high", "sma20_dist", "sma50_slope", "rsi_norm",
+                    "volatility", "momentum_10d", "volume_zscore", "hammer_signal"]
 
 
 def classify_opportunity(row: pd.Series):

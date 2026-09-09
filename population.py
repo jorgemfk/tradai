@@ -137,4 +137,15 @@ class Population:
         with open(path) as f:
             data = json.load(f)
         agents = [NeuralAgent.from_dict(d) for d in data["agents"]]
+
+        # si cambió el número de features (p.ej. se agregó la señal de martillo)
+        # los pesos guardados ya no encajan con la red actual -> hay que
+        # empezar una población nueva y volver a entrenar.
+        if agents and np.array(agents[0].genome["w1"]).shape[0] != config.N_FEATURES:
+            print(f"[population] La población guardada usa "
+                  f"{np.array(agents[0].genome['w1']).shape[0]} features y ahora se "
+                  f"esperan {config.N_FEATURES} (cambiaron las señales de entrada). "
+                  f"Se crea una población nueva; corre 'python main.py entrenar' de nuevo.")
+            return cls()
+
         return cls(agents=agents, generation=data.get("generation", 0))

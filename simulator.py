@@ -139,6 +139,7 @@ def run_daily_cycle(raw_data: dict, population: Population) -> dict:
                 "riesgo": risk,
                 "precio": float(row["close"]),
                 "caida_desde_maximo_pct": float(row["drop_from_high"] * 100),
+                "patron_martillo": bool(row["hammer_signal"] >= 1.0),
                 "n_agentes_compran": len(preds),
                 "confianza_promedio": float(np.mean(confidences)),
             })
