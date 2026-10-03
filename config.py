@@ -80,7 +80,6 @@ TICKERS = {
         "TRX-USD",
         "LTC-USD",
         "BCH-USD",
-        "UNI-USD",
         "ATOM-USD"
     ],
 
@@ -147,7 +146,7 @@ MIN_WARMUP_DAYS = 60        # días necesarios antes de poder calcular indicador
 # ---------------------------------------------------------------------------
 POPULATION_SIZE = 40
 HIDDEN_SIZE = 8              # neuronas ocultas de cada agente
-N_FEATURES = 8                # tamaño del vector de entrada (ver features.py)
+N_FEATURES = 11                # tamaño del vector de entrada (ver features.py)
 
 INITIAL_HAPPINESS = 50.0
 DEATH_HAPPINESS = 0.0        # el agente muere si su felicidad cae a esto o menos

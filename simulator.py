@@ -18,8 +18,13 @@ import pandas as pd
 
 import config
 import storage
-from features import build_feature_table, classify_opportunity, FEATURE_COLUMNS
+from features import build_feature_table, classify_opportunity, FEATURE_COLUMNS, PATTERN_LABELS
 from population import Population
+
+
+def _detected_patterns(row) -> list[str]:
+    """Nombres legibles de los patrones de velas detectados hoy para este activo."""
+    return [label for col, label in PATTERN_LABELS.items() if row.get(col, 0.0) >= 1.0]
 
 
 def _align_tables(feature_tables: dict) -> dict:
@@ -139,7 +144,7 @@ def run_daily_cycle(raw_data: dict, population: Population) -> dict:
                 "riesgo": risk,
                 "precio": float(row["close"]),
                 "caida_desde_maximo_pct": float(row["drop_from_high"] * 100),
-                "patron_martillo": bool(row["hammer_signal"] >= 1.0),
+                "patrones": _detected_patterns(row),
                 "n_agentes_compran": len(preds),
                 "confianza_promedio": float(np.mean(confidences)),
             })

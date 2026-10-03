@@ -20,6 +20,14 @@ def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return rsi.fillna(50.0)
 
 
+def _prior_downtrend(close: pd.Series, pattern_span: int, trend_lookback: int = 5) -> pd.Series:
+    """True si, antes de que empezara el patrón (que ocupa `pattern_span`
+    días terminando hoy), el precio venía cayendo. Se usa como requisito de
+    contexto: estos patrones solo cuentan como señal de REVERSIÓN si aparecen
+    después de una caída."""
+    return close.shift(pattern_span) < close.shift(pattern_span + trend_lookback)
+
+
 def detect_bullish_hammer(df: pd.DataFrame, trend_lookback: int = 5) -> pd.Series:
     """Detecta el patrón de velas 'martillo alcista' (hammer):
 
@@ -54,12 +62,87 @@ def detect_bullish_hammer(df: pd.DataFrame, trend_lookback: int = 5) -> pd.Serie
     # cuerpo es muy pequeño (para no descartar martillos "perfectos")
     sombra_superior_corta = upper_shadow <= np.maximum(0.5 * body_eff, 0.12 * rng_safe)
 
-    # contexto de caída previa: el cierre de ayer está por debajo del cierre
-    # de hace `trend_lookback` días -> veníamos de una tendencia bajista
-    caida_previa = c.shift(1) < c.shift(trend_lookback + 1)
+    caida_previa = _prior_downtrend(c, pattern_span=1, trend_lookback=trend_lookback)
 
     hammer = body_pequeno & sombra_inferior_larga & sombra_superior_corta & caida_previa
     return hammer.fillna(False)
+
+
+def detect_bullish_engulfing(df: pd.DataFrame, trend_lookback: int = 5) -> pd.Series:
+    """Patrón 'envolvente alcista' (bullish engulfing), 2 velas:
+
+      - ayer: vela bajista (cierre < apertura)
+      - hoy: vela alcista (cierre > apertura) cuyo cuerpo "envuelve" por
+        completo el cuerpo de ayer (abre más abajo que el cierre de ayer y
+        cierra más arriba que la apertura de ayer)
+      - el cuerpo de hoy es mayor al de ayer (convicción compradora real)
+      - aparece después de una caída reciente
+    """
+    o, c = df["open"], df["close"]
+
+    bajista_ayer = c.shift(1) < o.shift(1)
+    alcista_hoy = c > o
+    envuelve = (o <= c.shift(1)) & (c >= o.shift(1))
+    cuerpo_mayor = (c - o).abs() > (c.shift(1) - o.shift(1)).abs()
+    caida_previa = _prior_downtrend(c, pattern_span=2, trend_lookback=trend_lookback)
+
+    engulfing = bajista_ayer & alcista_hoy & envuelve & cuerpo_mayor & caida_previa
+    return engulfing.fillna(False)
+
+
+def detect_morning_star(df: pd.DataFrame, trend_lookback: int = 5) -> pd.Series:
+    """Patrón 'estrella de la mañana' (morning star), 3 velas:
+
+      - hace 2 días: vela bajista fuerte (cuerpo grande respecto a su rango)
+      - ayer: vela de cuerpo pequeño ("la estrella", indecisión)
+      - hoy: vela alcista que cierra por encima de la mitad del cuerpo de
+        hace 2 días (recupera buena parte de la caída)
+      - aparece después de una caída reciente (antes de la vela bajista fuerte)
+    """
+    o, h, l, c = df["open"], df["high"], df["low"], df["close"]
+
+    body1 = o.shift(2) - c.shift(2)                  # positivo si fue bajista
+    range1 = (h.shift(2) - l.shift(2)).replace(0, np.nan)
+    dia1_bajista_fuerte = (body1 > 0) & ((body1 / range1) >= 0.5)
+
+    body2 = (c.shift(1) - o.shift(1)).abs()
+    range2 = (h.shift(1) - l.shift(1)).replace(0, np.nan)
+    dia2_cuerpo_pequeno = (body2 / range2) <= 0.3
+
+    punto_medio_dia1 = (o.shift(2) + c.shift(2)) / 2
+    dia3_recupera = (c > o) & (c > punto_medio_dia1)
+
+    caida_previa = _prior_downtrend(c, pattern_span=3, trend_lookback=trend_lookback)
+
+    morning_star = dia1_bajista_fuerte & dia2_cuerpo_pequeno & dia3_recupera & caida_previa
+    return morning_star.fillna(False)
+
+
+def detect_indecision_doji(df: pd.DataFrame, trend_lookback: int = 5) -> pd.Series:
+    """Doji de indecisión: apertura y cierre casi idénticos (cuerpo
+    minúsculo respecto al rango del día), que aparece tras una caída —
+    señal de que los vendedores están perdiendo fuerza, aunque todavía sin
+    confirmar la reversión."""
+    o, h, l, c = df["open"], df["high"], df["low"], df["close"]
+
+    body = (c - o).abs()
+    rng = (h - l).replace(0, np.nan)
+    cuerpo_minusculo = (body / rng) <= 0.1
+
+    caida_previa = _prior_downtrend(c, pattern_span=1, trend_lookback=trend_lookback)
+
+    doji = cuerpo_minusculo & caida_previa
+    return doji.fillna(False)
+
+
+# Columnas de patrón -> etiqueta legible para tablas y el dashboard
+PATTERN_LABELS = {
+    "hammer_signal": "Martillo",
+    "engulfing_signal": "Envolvente alcista",
+    "morning_star_signal": "Estrella de la mañana",
+    "doji_signal": "Doji de indecisión",
+}
+PATTERN_COLUMNS = list(PATTERN_LABELS.keys())
 
 
 def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
@@ -73,7 +156,10 @@ def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
       4 volatility          : volatilidad (std retornos 20d)
       5 momentum_10d        : retorno acumulado de los últimos 10 días
       6 volume_zscore       : z-score del volumen respecto a su media 20d
-      7 hammer_signal       : 1.0 si hoy se formó un martillo alcista, si no 0.0
+      7 hammer_signal       : 1.0 si hoy se formó un martillo alcista
+      8 engulfing_signal    : 1.0 si hoy se formó una envolvente alcista
+      9 morning_star_signal : 1.0 si hoy se completó una estrella de la mañana
+      10 doji_signal          : 1.0 si hoy se formó un doji de indecisión
     """
     out = pd.DataFrame(index=df.index)
     close = df["close"]
@@ -105,8 +191,12 @@ def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
 
     if {"open", "high", "low"}.issubset(df.columns):
         out["hammer_signal"] = detect_bullish_hammer(df).astype(float)
+        out["engulfing_signal"] = detect_bullish_engulfing(df).astype(float)
+        out["morning_star_signal"] = detect_morning_star(df).astype(float)
+        out["doji_signal"] = detect_indecision_doji(df).astype(float)
     else:
-        out["hammer_signal"] = 0.0
+        for col in PATTERN_COLUMNS:
+            out[col] = 0.0
 
     out["close"] = close
     out["rolling_high"] = rolling_high
@@ -117,8 +207,8 @@ def build_feature_table(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-FEATURE_COLUMNS = ["drop_from_high", "sma20_dist", "sma50_slope", "rsi_norm",
-                    "volatility", "momentum_10d", "volume_zscore", "hammer_signal"]
+FEATURE_COLUMNS = (["drop_from_high", "sma20_dist", "sma50_slope", "rsi_norm",
+                      "volatility", "momentum_10d", "volume_zscore"] + PATTERN_COLUMNS)
 
 
 def classify_opportunity(row: pd.Series):
